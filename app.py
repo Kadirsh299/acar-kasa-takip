@@ -6,7 +6,6 @@ from openpyxl import Workbook
 import io, os
 # Kalıcı disk klasörü yoksa otomatik oluştur (Hata önleyici)
 os.makedirs("/var/data", exist_ok=True)
-
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "acar-kasa-gizli-anahtar-2025")
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:////var/data/acar_kasa.db"
