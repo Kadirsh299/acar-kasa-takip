@@ -5,7 +5,7 @@ from datetime import datetime
 from openpyxl import Workbook
 import io, os
 
-# Kalıcı disk klasörü yoksa otomatik oluştur (Hata önleyici)
+# Kalıcı disk klasörü yoksa otomatik oluştur
 os.makedirs("/var/data", exist_ok=True)
 
 app = Flask(__name__)
@@ -150,6 +150,7 @@ def odalar():
     odalar_list = Oda.query.all()
     return render_template("odalar.html", kayitlar=kayitlar, odalar=odalar_list, admin=admin_mi(), secili_tarih=secili_tarih)
 
+# GERİYE DÖNÜK TARİH DESTEKLİ KAYIT EKLEME
 @app.route("/kayit_ekle", methods=["POST"])
 @giris_gerek
 def kayit_ekle():
@@ -159,18 +160,32 @@ def kayit_ekle():
         flash("Geçerli tutar girin!", "danger"); return redirect(url_for("odalar"))
     if odenen > toplam:
         flash("Ödenen tutar toplamdan büyük olamaz!", "danger"); return redirect(url_for("odalar"))
-    k = Kayit(oda_no=request.form["oda"], musteri_adi=request.form.get("musteri_adi", ""), toplam_tutar=toplam, odenen=odenen, tip=request.form["tip"], personel=session.get("username"), kilitli=True, notlar=request.form.get("notlar", ""))
+    
+    # Admin geçmiş tarih seçebilsin
+    kayit_tarihi = datetime.now()
+    secilen_tarih = request.form.get("kayit_tarihi")
+    if admin_mi() and secilen_tarih:
+        try:
+            kayit_tarihi = datetime.strptime(secilen_tarih, "%Y-%m-%d")
+        except:
+            pass
+
+    k = Kayit(oda_no=request.form["oda"], musteri_adi=request.form.get("musteri_adi", ""), 
+              toplam_tutar=toplam, odenen=odenen, tip=request.form["tip"], 
+              personel=session.get("username"), kilitli=True, notlar=request.form.get("notlar", ""),
+              tarih=kayit_tarihi)
     db.session.add(k); db.session.commit()
-    log_yaz("KAYIT EKLE", f"{k.oda_no} - {toplam}")
-    flash(f"✅ {k.oda_no} → Toplam {toplam} TL, Ödenen {odenen} TL", "success")
-    return redirect(url_for("odalar", tarih=request.form.get("kayit_tarihi", datetime.now().strftime("%Y-%m-%d"))))
+    
+    log_yaz("KAYIT EKLE", f"{k.oda_no} - {toplam} (Tarih: {kayit_tarihi.strftime('%Y-%m-%d')})")
+    flash(f"✅ {k.oda_no} → {toplam} TL kaydedildi. Tarih: {kayit_tarihi.strftime('%d.%m.%Y')}", "success")
+    return redirect(url_for("odalar", tarih=secilen_tarih or datetime.now().strftime("%Y-%m-%d")))
 
 @app.route("/kayit_sil/<int:kid>")
 @giris_gerek
 def kayit_sil(kid):
     if not admin_mi(): flash("Yetkiniz yok!", "danger"); return redirect(url_for("odalar"))
     k = Kayit.query.get_or_404(kid); tarih = k.tarih.strftime("%Y-%m-%d"); db.session.delete(k); db.session.commit()
-    log_yaz("KAYIT SIL", f"ID {kid}"); return redirect(url_for("odalar", tarih=tarih))
+    log_yaz("KAYIT SIL", f"ID {kid}"); flash("Kayıt silindi.", "success"); return redirect(url_for("odalar", tarih=tarih))
 
 @app.route("/gecmis_kayit_talebi", methods=["POST"])
 @giris_gerek
