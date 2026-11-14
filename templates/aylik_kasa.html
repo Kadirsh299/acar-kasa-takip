@@ -1,0 +1,28 @@
+{% extends "base.html" %}{% block icerik %}
+<div class="kart" style="background:#e0f2fe; padding:15px;">
+    <h3 style="margin-top:0; color:#0369a1;">📅 Ay Seç (Aylık Kasa Raporu)</h3>
+    <form method="get" class="form-row" style="align-items:center; margin:0;">
+        <input type="month" name="ay" value="{{ secili_ay }}" required style="max-width:200px;">
+        <button class="btn btn-mavi" type="submit" style="width:auto;">Raporu Göster</button>
+    </form>
+</div>
+
+<div class="kart">
+<h3>📊 {{ secili_ay }} Ayı Toplam Gelirleri</h3>
+<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:15px; margin-bottom:20px;">
+    {% for tip, miktar in toplamlar.items() %}
+        {% if miktar > 0 %}
+        <div style="background:#f8fafc; padding:15px; border-radius:8px; border-left:4px solid #3b82f6; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+            <div style="font-size:12px; color:#64748b; text-transform:uppercase;">{{ tip }}</div>
+            <div style="font-size:20px; font-weight:bold; color:#1e293b; margin-top:5px;">{{ "%.2f"|format(miktar) }} TL</div>
+        </div>
+        {% endif %}
+    {% endfor %}
+</div>
+
+<div style="background:#fef2f2; padding:15px; border-radius:8px; border-left:4px solid #ef4444; display:inline-block;">
+    <div style="font-size:12px; color:#991b1b; text-transform:uppercase;">Aylık Toplam Gider</div>
+    <div style="font-size:20px; font-weight:bold; color:#dc2626; margin-top:5px;">-{{ "%.2f"|format(toplam_gider) }} TL</div>
+</div>
+</div>
+{% endblock %}
