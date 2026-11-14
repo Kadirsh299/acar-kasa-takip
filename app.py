@@ -69,6 +69,13 @@ class Izin(db.Model):
     tarih = db.Column(db.DateTime, default=datetime.now)
     aciklama = db.Column(db.String(255), default="")
 
+class AylikKur(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    ay = db.Column(db.String(7), unique=True, nullable=False) # Örn: 2026-11
+    usd = db.Column(db.Float, default=34.0)
+    eur = db.Column(db.Float, default=37.0)
+    gbp = db.Column(db.Float, default=43.0) # Pound Kuru Eklendi
+
 class Log(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     tarih = db.Column(db.DateTime, default=datetime.now)
@@ -136,7 +143,7 @@ def kasa():
 
     kayitlar = Kasa.query.filter(Kasa.tarih.like(f"{secili_tarih}%")).order_by(Kasa.tarih.desc()).all()
     
-    toplamlar = {"Nakit":0, "Kredi Kartı":0, "Havale":0, "Euro":0, "Dolar":0, "ETS":0, "Tatilbudur":0, "OtelFiyat":0, "Jolly Tur":0}
+    toplamlar = {"Nakit":0, "Kredi Kartı":0, "Havale":0, "Euro":0, "Dolar":0, "Pound":0, "ETS":0, "Tatilbudur":0, "OtelFiyat":0, "Jolly Tur":0}
     for k in kayitlar:
         if k.tip in toplamlar: toplamlar[k.tip] += k.tutar
 
@@ -152,21 +159,56 @@ def kasa_sil(id):
     return redirect(url_for("kasa", tarih=tarih))
 
 # ============ AYLIK KASA ============
-@app.route("/aylik_kasa")
+@app.route("/aylik_kasa", methods=["GET", "POST"])
 @giris_gerek
 def aylik_kasa():
-    secili_ay = request.args.get("ay", datetime.now().strftime("%Y-%m"))
-    kayitlar = Kasa.query.filter(Kasa.tarih.like(f"{secili_ay}%")).all()
+    secili_ay = request.values.get("ay", datetime.now().strftime("%Y-%m"))
     
-    toplamlar = {"Nakit":0, "Kredi Kartı":0, "Havale":0, "Euro":0, "Dolar":0, "ETS":0, "Tatilbudur":0, "OtelFiyat":0, "Jolly Tur":0}
+    # Kur Güncelleme İşlemi
+    if request.method == "POST":
+        try:
+            usd = float(request.form["usd"].replace(",", "."))
+            eur = float(request.form["eur"].replace(",", "."))
+            gbp = float(request.form["gbp"].replace(",", "."))
+            kur = AylikKur.query.filter_by(ay=secili_ay).first()
+            if kur:
+                kur.usd = usd; kur.eur = eur; kur.gbp = gbp
+            else:
+                db.session.add(AylikKur(ay=secili_ay, usd=usd, eur=eur, gbp=gbp))
+            db.session.commit()
+            flash("Döviz kurları başarıyla güncellendi.", "success")
+        except:
+            flash("Geçersiz kur değeri girdiniz!", "danger")
+        return redirect(url_for("aylik_kasa", ay=secili_ay))
+
+    # Kurları Çek
+    kur = AylikKur.query.filter_by(ay=secili_ay).first()
+    usd_kur = kur.usd if kur else 34.0
+    eur_kur = kur.eur if kur else 37.0
+    gbp_kur = kur.gbp if kur else 43.0
+
+    # Gelirleri Çek
+    kayitlar = Kasa.query.filter(Kasa.tarih.like(f"{secili_ay}%")).all()
+    toplamlar = {"Nakit":0, "Kredi Kartı":0, "Havale":0, "Euro":0, "Dolar":0, "Pound":0, "ETS":0, "Tatilbudur":0, "OtelFiyat":0, "Jolly Tur":0}
     for k in kayitlar:
         if k.tip in toplamlar: toplamlar[k.tip] += k.tutar
         
-    # Giderler de bu aya ait olsun
+    # Hesaplamalar
+    tl_gelir = sum(v for k, v in toplamlar.items() if k not in ["Euro", "Dolar", "Pound"])
+    dolar_tl = toplamlar["Dolar"] * usd_kur
+    euro_tl = toplamlar["Euro"] * eur_kur
+    pound_tl = toplamlar["Pound"] * gbp_kur
+    
+    toplam_gelir_tl = tl_gelir + dolar_tl + euro_tl + pound_tl
+
     giderler = Gider.query.filter(Gider.tarih.like(f"{secili_ay}%")).all()
     toplam_gider = sum(g.tutar for g in giderler)
     
-    return render_template("aylik_kasa.html", secili_ay=secili_ay, toplamlar=toplamlar, toplam_gider=toplam_gider)
+    kalan = toplam_gelir_tl - toplam_gider
+
+    return render_template("aylik_kasa.html", secili_ay=secili_ay, toplamlar=toplamlar, 
+                           toplam_gider=toplam_gider, usd_kur=usd_kur, eur_kur=eur_kur, gbp_kur=gbp_kur,
+                           dolar_tl=dolar_tl, euro_tl=euro_tl, pound_tl=pound_tl, toplam_gelir_tl=toplam_gelir_tl, kalan=kalan)
 
 # ============ GİDERLER ============
 @app.route("/giderler", methods=["GET", "POST"])
@@ -354,6 +396,14 @@ def sifre_degistir():
 def init_db():
     with app.app_context():
         db.create_all()
+        
+        # VERİTABANI OTOMATİK GÜNCELLEME (Pound kuru sütunu zorla eklenir)
+        from sqlalchemy import text
+        try:
+            db.session.execute(text("ALTER TABLE aylik_kur ADD COLUMN gbp FLOAT DEFAULT 43.0"))
+            db.session.commit()
+        except: db.session.rollback()
+
         if not User.query.filter_by(username="admin").first():
             db.session.add(User(username="admin", password_hash=generate_password_hash("1234"), full_name="Baş Patron"))
             db.session.commit(); print("✅ Patron sistemi kuruldu.")
