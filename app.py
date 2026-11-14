@@ -9,7 +9,6 @@ os.makedirs("/var/data", exist_ok=True)
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "acar-patron-2025-gizli-anahtar")
-# Yeni Patron Sistemi Veritabanı (Eski verileri etkilemez)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:////var/data/acar_patron.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
@@ -89,6 +88,10 @@ def log_yaz(islem, detay=""):
     db.session.add(Log(islem=islem, detay=detay))
     db.session.commit()
 
+@app.context_processor
+def inject_user():
+    return dict(current_user=User.query.get(session.get("user_id")) if giris_yapmis() else None)
+
 # ============ ROTALAR ============
 @app.route("/login", methods=["GET","POST"])
 def login():
@@ -119,7 +122,7 @@ def kasa():
     if request.method == "POST":
         try: tutar = float(request.form["tutar"].replace(",", "."))
         except: flash("Geçerli tutar girin!", "danger"); return redirect(url_for("kasa"))
-        
+            
         islem_tarihi = datetime.now()
         if request.form.get("tarih"):
             try: islem_tarihi = datetime.strptime(request.form["tarih"], "%Y-%m-%d")
@@ -133,7 +136,6 @@ def kasa():
 
     kayitlar = Kasa.query.filter(Kasa.tarih.like(f"{secili_tarih}%")).order_by(Kasa.tarih.desc()).all()
     
-    # Günlük Toplamlar
     toplamlar = {"Nakit":0, "Kredi Kartı":0, "Havale":0, "Euro":0, "Dolar":0, "ETS":0, "Tatilbudur":0, "OtelFiyat":0, "Jolly Tur":0}
     for k in kayitlar:
         if k.tip in toplamlar: toplamlar[k.tip] += k.tutar
@@ -148,6 +150,23 @@ def kasa_sil(id):
     log_yaz("KASA SİL", f"{k.tutar} TL silindi.")
     flash("Kasa kaydı silindi.", "success")
     return redirect(url_for("kasa", tarih=tarih))
+
+# ============ AYLIK KASA ============
+@app.route("/aylik_kasa")
+@giris_gerek
+def aylik_kasa():
+    secili_ay = request.args.get("ay", datetime.now().strftime("%Y-%m"))
+    kayitlar = Kasa.query.filter(Kasa.tarih.like(f"{secili_ay}%")).all()
+    
+    toplamlar = {"Nakit":0, "Kredi Kartı":0, "Havale":0, "Euro":0, "Dolar":0, "ETS":0, "Tatilbudur":0, "OtelFiyat":0, "Jolly Tur":0}
+    for k in kayitlar:
+        if k.tip in toplamlar: toplamlar[k.tip] += k.tutar
+        
+    # Giderler de bu aya ait olsun
+    giderler = Gider.query.filter(Gider.tarih.like(f"{secili_ay}%")).all()
+    toplam_gider = sum(g.tutar for g in giderler)
+    
+    return render_template("aylik_kasa.html", secili_ay=secili_ay, toplamlar=toplamlar, toplam_gider=toplam_gider)
 
 # ============ GİDERLER ============
 @app.route("/giderler", methods=["GET", "POST"])
@@ -277,12 +296,66 @@ def maas_ode(pid):
 def personel_sil(pid):
     p = Personel.query.get_or_404(pid); Avans.query.filter_by(personel_id=p.id).delete(); Izin.query.filter_by(personel_id=p.id).delete(); db.session.delete(p); db.session.commit(); return redirect(url_for("personel"))
 
+# ============ KULLANICI YÖNETİMİ VE ŞİFRE ============
+@app.route("/kullanicilar", methods=["GET", "POST"])
+@giris_gerek
+def kullanicilar():
+    if request.method == "POST":
+        kullanici_adi = request.form["username"]
+        sifre = request.form["password"]
+        ad_soyad = request.form["full_name"]
+        
+        if User.query.filter_by(username=kullanici_adi).first():
+            flash("Bu kullanıcı adı zaten alınmış!", "danger")
+        else:
+            yeni_user = User(username=kullanici_adi, password_hash=generate_password_hash(sifre), full_name=ad_soyad)
+            db.session.add(yeni_user)
+            db.session.commit()
+            log_yaz("KULLANICI EKLE", kullanici_adi)
+            flash(f"✅ {ad_soyad} adlı yeni ana kullanıcı eklendi.", "success")
+        return redirect(url_for("kullanicilar"))
+        
+    return render_template("kullanicilar.html", kullanicilar=User.query.all())
+
+@app.route("/kullanici_sil/<int:id>")
+@giris_gerek
+def kullanici_sil(id):
+    if id == session.get("user_id"):
+        flash("Kendi hesabınızı silemezsiniz!", "danger")
+        return redirect(url_for("kullanicilar"))
+    u = User.query.get_or_404(id)
+    db.session.delete(u); db.session.commit()
+    flash("Kullanıcı silindi.", "success")
+    return redirect(url_for("kullanicilar"))
+
+@app.route("/sifre_degistir", methods=["GET", "POST"])
+@giris_gerek
+def sifre_degistir():
+    if request.method == "POST":
+        eski = request.form["eski_sifre"]
+        yeni = request.form["yeni_sifre"]
+        tekrar = request.form["yeni_sifre_tekrar"]
+        
+        u = User.query.get(session["user_id"])
+        if not check_password_hash(u.password_hash, eski):
+            flash("Mevcut şifreniz yanlış!", "danger")
+        elif yeni != tekrar:
+            flash("Yeni şifreler birbiriyle uyuşmuyor!", "danger")
+        elif len(yeni) < 4:
+            flash("Yeni şifre en az 4 karakter olmalıdır!", "danger")
+        else:
+            u.password_hash = generate_password_hash(yeni)
+            db.session.commit()
+            flash("✅ Şifreniz başarıyla güncellendi!", "success")
+            return redirect(url_for("kasa"))
+    return render_template("sifre_degistir.html")
+
 # ============ BAŞLANGIÇ ============
 def init_db():
     with app.app_context():
         db.create_all()
         if not User.query.filter_by(username="admin").first():
-            db.session.add(User(username="admin", password_hash=generate_password_hash("1234"), full_name="Patron"))
+            db.session.add(User(username="admin", password_hash=generate_password_hash("1234"), full_name="Baş Patron"))
             db.session.commit(); print("✅ Patron sistemi kuruldu.")
 
 init_db()
