@@ -1,4 +1,34 @@
 {% extends "base.html" %}{% block icerik %}
-<div class="kart"><h3>👥 Yeni Personel Ekle (Giriş Yetkisi)</h3><form method="post" action="{{ url_for('personel_ekle') }}" class="form-row"><input name="full_name" placeholder="Ad Soyad" required style="flex:2;"><input name="username" placeholder="Kullanıcı Adı" required style="flex:1;"><input name="password" type="password" placeholder="Şifre" required style="flex:1;"><button class="btn btn-yesil" type="submit">EKLE</button></form></div>
-<div class="kart"><h3>📋 Kayıtlı Kullanıcılar</h3><div style="overflow-x:auto"><table><tr><th>Ad Soyad</th><th>Kullanıcı Adı</th><th>Rolü</th><th>Durum</th></tr>{% for u in kullanicilar %}<tr><td>{{ u.full_name }}</td><td><b>{{ u.username }}</b></td><td>{{ u.role|upper }}</td><td><span style="color:green; font-weight:bold;">Aktif</span></td></tr>{% endfor %}</table></div></div>
+<div class="kart">
+<h3>👤 Yeni Ana Kullanıcı Ekle</h3>
+<form method="post" class="form-row">
+    <input name="full_name" placeholder="Ad Soyad (Örn: Ahmet Bey)" required style="flex:2;">
+    <input name="username" placeholder="Kullanıcı Adı (Örn: ahmet)" required style="flex:1;">
+    <input name="password" type="password" placeholder="Şifre" required style="flex:1;">
+    <button class="btn btn-yesil" type="submit">KULLANICI EKLE</button>
+</form>
+<p style="font-size:12px; color:#64748b; margin-top:10px;">Eklediğiniz kullanıcılar sisteme tam yetkiyle (Patron olarak) giriş yapabilir.</p>
+</div>
+
+<div class="kart">
+<h3>📋 Kayıtlı Kullanıcılar</h3>
+<div style="overflow-x:auto">
+<table>
+<tr><th>Ad Soyad</th><th>Kullanıcı Adı</th><th>İşlem</th></tr>
+{% for u in kullanicilar %}
+<tr>
+    <td><b>{{ u.full_name }}</b></td>
+    <td>{{ u.username }}</td>
+    <td>
+        {% if u.id == current_user.id %}
+            <span style="color:#16a34a; font-weight:bold;">(Siz)</span>
+        {% else %}
+            <a href="{{ url_for('kullanici_sil', id=u.id) }}" class="btn btn-kirmizi" style="padding:5px 8px;font-size:11px" onclick="return confirm('Bu kullanıcı silinsin mi?')">Sil</a>
+        {% endif %}
+    </td>
+</tr>
+{% endfor %}
+</table>
+</div>
+</div>
 {% endblock %}
