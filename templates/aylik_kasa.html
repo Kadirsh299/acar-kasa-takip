@@ -7,22 +7,55 @@
     </form>
 </div>
 
+<div class="kart" style="background:#f8fafc; border: 1px solid #e2e8f0;">
+    <h3 style="color:#334155;">💱 {{ secili_ay }} Döviz Kurları</h3>
+    <form method="post" class="form-row" style="align-items:flex-end;">
+        <input type="hidden" name="ay" value="{{ secili_ay }}">
+        <label style="font-size:13px; flex:1;">Dolar Kuru (TL):<br><input type="number" step="0.01" name="usd" value="{{ usd_kur }}" required style="width:100%;"></label>
+        <label style="font-size:13px; flex:1;">Euro Kuru (TL):<br><input type="number" step="0.01" name="eur" value="{{ eur_kur }}" required style="width:100%;"></label>
+        <label style="font-size:13px; flex:1;">Pound Kuru (TL):<br><input type="number" step="0.01" name="gbp" value="{{ gbp_kur }}" required style="width:100%;"></label>
+        <button class="btn btn-turuncu" type="submit" style="width:auto;">KURLARI GÜNCELLE</button>
+    </form>
+    <p style="font-size:12px; color:#64748b; margin-top:10px;">Girdiğiniz kurlar, aşağıdaki raporun TL karşılıklarını otomatik olarak hesaplar.</p>
+</div>
+
 <div class="kart">
-<h3>📊 {{ secili_ay }} Ayı Toplam Gelirleri</h3>
-<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:15px; margin-bottom:20px;">
+<h3>📊 {{ secili_ay }} Ayı Gelir Detayları</h3>
+<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:15px; margin-bottom:20px;">
     {% for tip, miktar in toplamlar.items() %}
         {% if miktar > 0 %}
-        <div style="background:#f8fafc; padding:15px; border-radius:8px; border-left:4px solid #3b82f6; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <div style="background:white; padding:15px; border-radius:8px; border-left:4px solid #3b82f6; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
             <div style="font-size:12px; color:#64748b; text-transform:uppercase;">{{ tip }}</div>
-            <div style="font-size:20px; font-weight:bold; color:#1e293b; margin-top:5px;">{{ "%.2f"|format(miktar) }} TL</div>
+            <div style="font-size:18px; font-weight:bold; color:#1e293b; margin-top:5px;">{{ "%.2f"|format(miktar) }} 
+                {% if tip == 'Dolar' %}${% elif tip == 'Euro' %}€{% elif tip == 'Pound' %}£{% else %}TL{% endif %}
+            </div>
+            {% if tip == 'Dolar' %}
+                <div style="font-size:11px; color:#16a34a; margin-top:5px;">≈ {{ "%.2f"|format(dolar_tl) }} TL</div>
+            {% elif tip == 'Euro' %}
+                <div style="font-size:11px; color:#16a34a; margin-top:5px;">≈ {{ "%.2f"|format(euro_tl) }} TL</div>
+            {% elif tip == 'Pound' %}
+                <div style="font-size:11px; color:#16a34a; margin-top:5px;">≈ {{ "%.2f"|format(pound_tl) }} TL</div>
+            {% endif %}
         </div>
         {% endif %}
     {% endfor %}
 </div>
 
-<div style="background:#fef2f2; padding:15px; border-radius:8px; border-left:4px solid #ef4444; display:inline-block;">
-    <div style="font-size:12px; color:#991b1b; text-transform:uppercase;">Aylık Toplam Gider</div>
-    <div style="font-size:20px; font-weight:bold; color:#dc2626; margin-top:5px;">-{{ "%.2f"|format(toplam_gider) }} TL</div>
+<div style="display:flex; gap:15px; flex-wrap:wrap; margin-top:20px;">
+    <div style="background:#eff6ff; padding:20px; border-radius:8px; flex:1; border-left:5px solid #3b82f6;">
+        <div style="font-size:13px; color:#1e40af; text-transform:uppercase; font-weight:bold;">Toplam Gelir (TL)</div>
+        <div style="font-size:24px; font-weight:bold; color:#1e3a8a; margin-top:5px;">{{ "%.2f"|format(toplam_gelir_tl) }} TL</div>
+    </div>
+    
+    <div style="background:#fef2f2; padding:20px; border-radius:8px; flex:1; border-left:5px solid #ef4444;">
+        <div style="font-size:13px; color:#991b1b; text-transform:uppercase; font-weight:bold;">Toplam Gider (TL)</div>
+        <div style="font-size:24px; font-weight:bold; color:#7f1d1d; margin-top:5px;">-{{ "%.2f"|format(toplam_gider) }} TL</div>
+    </div>
+
+    <div style="background:#f0fdf4; padding:20px; border-radius:8px; flex:1; border-left:5px solid #22c55e;">
+        <div style="font-size:13px; color:#166534; text-transform:uppercase; font-weight:bold;">Kalan (Net Kâr)</div>
+        <div style="font-size:24px; font-weight:bold; color:#14532d; margin-top:5px;">{{ "%.2f"|format(kalan) }} TL</div>
+    </div>
 </div>
 </div>
 {% endblock %}
