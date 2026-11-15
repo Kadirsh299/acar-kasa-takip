@@ -5,7 +5,7 @@
     <input name="ad_soyad" placeholder="Ad Soyad" required style="flex:2;">
     <input name="gorev" placeholder="Görevi" required style="flex:1;">
     <input name="maas" placeholder="Maaş (TL)" type="number" step="0.01" required style="flex:1;">
-    <label style="font-size:12px;">İşe Giriş Tarihi:<br><input type="date" name="ise_giris" required style="width:100%;"></label>
+    <label style="font-size:12px;">İşe Giriş:<br><input type="date" name="ise_giris" required style="width:100%;"></label>
     <label style="font-size:12px;">Maaş Günü:<br><input type="number" name="maas_gunu" min="1" max="31" value="1" required style="width:100%;"></label>
     <button class="btn btn-yesil" type="submit" style="align-self:flex-end;">PERSONEL EKLE</button>
 </form>
@@ -31,16 +31,86 @@
         <b style="color:#16a34a;">Kalan: {{ "%.2f"|format(kalan_maas) }} TL</b>
     </td>
     <td>
-        <button class="btn btn-turuncu" style="padding:4px 8px;font-size:11px" onclick="avansAc({{ p.id }}, '{{ p.ad_soyad }}')">💸 Avans</button>
-        <button class="btn btn-mavi" style="padding:4px 8px;font-size:11px" onclick="izinAc({{ p.id }}, '{{ p.ad_soyad }}')">🏖️ İzin</button>
-        {% if kalan_maas > 0 %}<a href="{{ url_for('maas_ode', pid=p.id) }}" class="btn btn-yesil" style="padding:4px 8px;font-size:11px" onclick="return confirm('Maaş ödenip gidere yazılacak. Onaylıyor musunuz?')">💰 Maaş Öde</a>{% endif %} 
-        <a href="{{ url_for('personel_sil', pid=p.id) }}" class="btn btn-kirmizi" style="padding:4px 8px;font-size:11px" onclick="return confirm('Personel silinsin mi?')">Sil</a>
+        <!-- Geçmiş Butonu -->
+        <button class="btn btn-mavi" style="padding:4px 8px;font-size:11px" onclick="gecmisAc('{{ p.id }}')">📜 Geçmiş</button>
+        <!-- Düzenle Butonu -->
+        <button class="btn btn-turuncu" style="padding:4px 8px;font-size:11px" onclick="duzenleAc({{ p.id }}, '{{ p.ad_soyad }}', '{{ p.gorev }}', {{ p.maas }}, '{{ p.ise_giris.strftime('%Y-%m-%d') if p.ise_giris else '' }}', {{ p.maas_gunu }})">✏️ Düzenle</button>
+        <br>
+        <button class="btn btn-yesil" style="padding:4px 8px;font-size:11px; margin-top:3px;" onclick="avansAc({{ p.id }}, '{{ p.ad_soyad }}')">💸 Avans</button>
+        <button class="btn btn-gri" style="padding:4px 8px;font-size:11px; margin-top:3px;" onclick="izinAc({{ p.id }}, '{{ p.ad_soyad }}')">🏖️ İzin</button>
+        
+        {% if kalan_maas > 0 %}<a href="{{ url_for('maas_ode', pid=p.id) }}" class="btn btn-yesil" style="padding:4px 8px;font-size:11px; margin-top:3px;" onclick="return confirm('Maaş ödenip gidere yazılacak. Onaylıyor musunuz?')">💰 Maaş Öde</a>{% endif %} 
+        <a href="{{ url_for('personel_sil', pid=p.id) }}" class="btn btn-kirmizi" style="padding:4px 8px;font-size:11px; margin-top:3px;" onclick="return confirm('Personel ve tüm geçmişi silinsin mi?')">Sil</a>
     </td>
 </tr>
+
+<!-- Her personel için gizli Geçmiş Modalı -->
+<div id="gecmisModal_{{ p.id }}" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999;align-items:center;justify-content:center;padding:20px; overflow-y:auto;">
+    <div class="kart" style="max-width:600px;width:100%;margin:20px auto;">
+        <h3>📜 {{ p.ad_soyad }} - Geçmiş Dökümü</h3>
+        
+        <h4 style="margin-top:20px; color:#dc2626;">Alınan Avanslar</h4>
+        {% if p.avanslar %}
+        <table style="font-size:13px;">
+            <tr><th>Tarih</th><th>Tutar</th><th>Açıklama</th></tr>
+            {% for a in p.avanslar %}
+            <tr>
+                <td>{{ a.tarih.strftime("%d.%m.%Y %H:%M") }}</td>
+                <td style="color:#dc2626; font-weight:bold;">{{ "%.2f"|format(a.tutar) }} TL</td>
+                <td>{{ a.aciklama or "-" }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% else %}<p style="font-size:13px; color:#64748b;">Hiç avans alınmamış.</p>{% endif %}
+
+        <h4 style="margin-top:20px; color:#3b82f6;">Kullanılan İzinler</h4>
+        {% if p.izinler %}
+        <table style="font-size:13px;">
+            <tr><th>Tarih</th><th>Gün</th><th>Açıklama</th></tr>
+            {% for i in p.izinler %}
+            <tr>
+                <td>{{ i.tarih.strftime("%d.%m.%Y %H:%M") }}</td>
+                <td style="color:#3b82f6; font-weight:bold;">{{ i.gun_sayisi }} Gün</td>
+                <td>{{ i.aciklama or "-" }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% else %}<p style="font-size:13px; color:#64748b;">Hiç izin kullanılmamış.</p>{% endif %}
+
+        <div style="margin-top:20px; text-align:right;">
+            <button class="btn btn-gri" onclick="document.getElementById('gecmisModal_{{ p.id }}').style.display='none'">KAPAT</button>
+        </div>
+    </div>
+</div>
 {% endfor %}
 </table>
 </div>
 </div>
+
+<!-- Düzenle Modalı -->
+<div id="duzenleModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999;align-items:center;justify-content:center;padding:20px">
+<div class="kart" style="max-width:500px;width:100%;margin:0">
+<h3>✏️ Personel Bilgilerini Düzenle</h3>
+<form method="post" id="duzenleForm">
+    <div class="form-row" style="margin-bottom:10px;">
+        <input name="ad_soyad" id="d_ad" placeholder="Ad Soyad" required>
+    </div>
+    <div class="form-row" style="margin-bottom:10px;">
+        <input name="gorev" id="d_gorev" placeholder="Görevi" required>
+    </div>
+    <div class="form-row" style="margin-bottom:10px;">
+        <input name="maas" id="d_maas" placeholder="Maaş (TL)" type="number" step="0.01" required>
+    </div>
+    <div class="form-row" style="margin-bottom:10px;">
+        <label style="font-size:12px; flex:1;">İşe Giriş:<br><input type="date" name="ise_giris" id="d_ise_giris" required style="width:100%;"></label>
+        <label style="font-size:12px; flex:1;">Maaş Günü:<br><input type="number" name="maas_gunu" id="d_maas_gunu" min="1" max="31" required style="width:100%;"></label>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:15px">
+        <button type="submit" class="btn btn-yesil" style="flex:1">GÜNCELLE</button>
+        <button type="button" class="btn btn-gri" style="flex:1" onclick="document.getElementById('duzenleModal').style.display='none'">İPTAL</button>
+    </div>
+</form>
+</div></div>
 
 <!-- Avans Modal -->
 <div id="avansModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999;align-items:center;justify-content:center;padding:20px">
@@ -51,7 +121,27 @@
 <div class="kart" style="max-width:400px;width:100%;margin:0"><h3>🏖️ İzin Ekle</h3><p>Personel: <b id="izinAd"></b></p><form method="post" id="izinForm"><input name="gun_sayisi" placeholder="İzin Gün Sayısı (Örn: 1 veya 0.5)" required type="number" step="0.5" style="width:100%;margin:10px 0"><input name="aciklama" placeholder="Açıklama (İsteğe bağlı)" style="width:100%;margin:5px 0"><div style="display:flex;gap:10px;margin-top:15px"><button type="submit" class="btn btn-yesil" style="flex:1">ONAYLA</button><button type="button" class="btn btn-gri" style="flex:1" onclick="document.getElementById('izinModal').style.display='none'">İPTAL</button></div></form></div></div>
 
 <script>
-function avansAc(id, ad){document.getElementById('avansAd').textContent = ad;document.getElementById('avansForm').action = "/avans_ver/" + id;document.getElementById('avansModal').style.display = 'flex';}
-function izinAc(id, ad){document.getElementById('izinAd').textContent = ad;document.getElementById('izinForm').action = "/izin_ekle/" + id;document.getElementById('izinModal').style.display = 'flex';}
+function avansAc(id, ad){
+    document.getElementById('avansAd').textContent = ad;
+    document.getElementById('avansForm').action = "/avans_ver/" + id;
+    document.getElementById('avansModal').style.display = 'flex';
+}
+function izinAc(id, ad){
+    document.getElementById('izinAd').textContent = ad;
+    document.getElementById('izinForm').action = "/izin_ekle/" + id;
+    document.getElementById('izinModal').style.display = 'flex';
+}
+function gecmisAc(id){
+    document.getElementById('gecmisModal_' + id).style.display = 'flex';
+}
+function duzenleAc(id, ad, gorev, maas, ise_giris, maas_gunu){
+    document.getElementById('d_ad').value = ad;
+    document.getElementById('d_gorev').value = gorev;
+    document.getElementById('d_maas').value = maas;
+    document.getElementById('d_ise_giris').value = ise_giris;
+    document.getElementById('d_maas_gunu').value = maas_gunu;
+    document.getElementById('duzenleForm').action = "/personel_duzenle/" + id;
+    document.getElementById('duzenleModal').style.display = 'flex';
+}
 </script>
 {% endblock %}
