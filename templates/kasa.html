@@ -1,28 +1,46 @@
 {% extends "base.html" %}{% block icerik %}
 <div class="kart" style="background:#e0f2fe; padding:15px;">
-    <h3 style="margin-top:0; color:#0369a1;">📅 Tarih Seç (Günlük Kasa)</h3>
+    <h3 style="margin-top:0; color:#0369a1;">📅 Tarih Seç</h3>
     <form method="get" class="form-row" style="align-items:center; margin:0;">
         <input type="date" name="tarih" value="{{ secili_tarih }}" required style="max-width:200px;">
         <button class="btn btn-mavi" type="submit" style="width:auto;">O Günü Göster</button>
     </form>
 </div>
 
-<div class="kart">
-<h3>➕ Günlük Kasa Ekle</h3>
-<form method="post" class="form-row">
-    <label style="font-size:12px;">Tarih:<br><input type="date" name="tarih" value="{{ secili_tarih }}" required></label>
-    <select name="tip" required>
-        <option value="">Ödeme Tipi</option>
-        <option>Nakit</option><option>Kredi Kartı</option><option>Havale</option>
-        <option>Euro</option><option>Dolar</option><option>Pound</option>
-        <option>ETS</option><option>Tatilbudur</option><option>OtelFiyat</option><option>Jolly Tur</option>
-    </select>
-    <input name="tutar" placeholder="Tutar" required type="number" step="0.01">
-    <input name="aciklama" placeholder="Açıklama (İsteğe bağlı)">
-    <button class="btn btn-yesil" type="submit">KASAYA EKLE</button>
-</form>
+<!-- YAN YANA EKLEME FORMLARI -->
+<div style="display:flex; gap:15px; flex-wrap:wrap; margin-bottom:15px;">
+    <!-- GELİR EKLE -->
+    <div class="kart" style="flex:1; min-width:300px; border-top:4px solid #22c55e; margin-bottom:0;">
+        <h3 style="color:#16a34a;">➕ Gelir Ekle</h3>
+        <form method="post" class="form-row">
+            <input type="hidden" name="form_tipi" value="gelir">
+            <label style="font-size:12px;">Tarih:<br><input type="date" name="tarih" value="{{ secili_tarih }}" required></label>
+            <select name="tip" required>
+                <option value="">Ödeme Tipi</option>
+                <option>Nakit</option><option>Kredi Kartı</option><option>Havale</option>
+                <option>Euro</option><option>Dolar</option><option>Pound</option>
+                <option>ETS</option><option>Tatilbudur</option><option>OtelFiyat</option><option>Jolly Tur</option>
+            </select>
+            <input name="tutar" placeholder="Tutar" required type="number" step="0.01">
+            <input name="aciklama" placeholder="Açıklama (İsteğe bağlı)">
+            <button class="btn btn-yesil" type="submit">GELİR EKLE</button>
+        </form>
+    </div>
+
+    <!-- GİDER EKLE -->
+    <div class="kart" style="flex:1; min-width:300px; border-top:4px solid #ef4444; margin-bottom:0;">
+        <h3 style="color:#dc2626;">➖ Gider Ekle</h3>
+        <form method="post" class="form-row">
+            <input type="hidden" name="form_tipi" value="gider">
+            <label style="font-size:12px;">Tarih:<br><input type="date" name="tarih" value="{{ secili_tarih }}" required></label>
+            <input name="aciklama" placeholder="Gider Açıklaması" required style="flex:2;">
+            <input name="tutar" placeholder="Tutar" required type="number" step="0.01">
+            <button class="btn btn-kirmizi" type="submit">GİDER EKLE</button>
+        </form>
+    </div>
 </div>
 
+<!-- ÖZET -->
 <div class="kart">
 <h3>📊 {{ secili_tarih }} Günlük Özet</h3>
 <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px; margin-bottom:15px;">
@@ -37,28 +55,51 @@
 </div>
 </div>
 
-<div class="kart">
-<h3>📋 {{ secili_tarih }} Kasa Kayıtları</h3>
-{% if kayitlar %}
-<div style="overflow-x:auto"><table>
-<tr><th>Saat</th><th>Ödeme Tipi</th><th>Tutar</th><th>Açıklama</th><th>İşlem</th></tr>
-{% for k in kayitlar %}
-<tr>
-<td>{{ k.tarih.strftime("%H:%M") }}</td>
-<td><b>{{ k.tip }}</b></td>
-<td style="color:#16a34a; font-weight:bold;">{{ "%.2f"|format(k.tutar) }} TL</td>
-<td>{{ k.aciklama or "-" }}</td>
-<td><a href="{{ url_for('kasa_sil', id=k.id) }}" class="btn btn-kirmizi" style="padding:5px 8px;font-size:11px" onclick="return confirm('Silinsin mi?')">Sil</a></td>
-</tr>
-{% endfor %}
-</table></div>
-{% else %}
-<div style="text-align:center; padding:30px; color:#64748b;"><h3>Bu tarihte kasa kaydı yok.</h3></div>
-{% endif %}
+<!-- LİSTELER (YAN YANA) -->
+<div style="display:flex; gap:15px; flex-wrap:wrap;">
+    <!-- GELİR LİSTESİ -->
+    <div class="kart" style="flex:1; min-width:300px;">
+        <h3 style="color:#16a34a;">📋 Günün Gelirleri</h3>
+        {% if kayitlar %}
+        <div style="overflow-x:auto"><table>
+        <tr><th>Saat</th><th>Tip</th><th>Tutar</th><th>İşlem</th></tr>
+        {% for k in kayitlar %}
+        <tr>
+        <td>{{ k.tarih.strftime("%H:%M") }}</td>
+        <td>{{ k.tip }}</td>
+        <td style="color:#16a34a; font-weight:bold;">{{ "%.2f"|format(k.tutar) }} TL</td>
+        <td><a href="{{ url_for('kasa_sil', id=k.id) }}" class="btn btn-kirmizi" style="padding:4px 8px;font-size:11px" onclick="return confirm('Silinsin mi?')">Sil</a></td>
+        </tr>
+        {% endfor %}
+        </table></div>
+        {% else %}
+        <p style="color:#64748b; font-size:13px;">Bu gün için gelir kaydı yok.</p>
+        {% endif %}
+    </div>
+
+    <!-- GİDER LİSTESİ -->
+    <div class="kart" style="flex:1; min-width:300px;">
+        <h3 style="color:#dc2626;">📋 Günün Giderleri</h3>
+        {% if giderler %}
+        <div style="overflow-x:auto"><table>
+        <tr><th>Saat</th><th>Açıklama</th><th>Tutar</th><th>İşlem</th></tr>
+        {% for g in giderler %}
+        <tr>
+        <td>{{ g.tarih.strftime("%H:%M") }}</td>
+        <td>{{ g.aciklama }}</td>
+        <td style="color:#dc2626; font-weight:bold;">{{ "%.2f"|format(g.tutar) }} TL</td>
+        <td><a href="{{ url_for('gider_sil', id=g.id) }}" class="btn btn-kirmizi" style="padding:4px 8px;font-size:11px" onclick="return confirm('Silinsin mi?')">Sil</a></td>
+        </tr>
+        {% endfor %}
+        </table></div>
+        {% else %}
+        <p style="color:#64748b; font-size:13px;">Bu gün için gider kaydı yok.</p>
+        {% endif %}
+    </div>
 </div>
 
-<!-- GÜN SONU ÖZETİ (YENİ EKLENEN KISIM) -->
-<div class="kart">
+<!-- GÜN SONU ÖZETİ -->
+<div class="kart" style="margin-top:15px;">
 <h3>📌 {{ secili_tarih }} Gün Sonu Durumu</h3>
 <div style="display:flex; gap:15px; flex-wrap:wrap;">
     <div style="background:#eff6ff; padding:20px; border-radius:8px; flex:1; border-left:5px solid #3b82f6;">
