@@ -1,24 +1,36 @@
 {% extends "base.html" %}{% block icerik %}
 <div class="kart">
-<h3>👤 Yeni Ana Kullanıcı Ekle</h3>
+<h3>👤 Yeni Kullanıcı / Ortak Ekle</h3>
 <form method="post" class="form-row">
     <input name="full_name" placeholder="Ad Soyad (Örn: Ahmet Bey)" required style="flex:2;">
-    <input name="username" placeholder="Kullanıcı Adı (Örn: ahmet)" required style="flex:1;">
+    <input name="username" placeholder="Kullanıcı Adı" required style="flex:1;">
     <input name="password" type="password" placeholder="Şifre" required style="flex:1;">
+    <select name="role" required style="flex:1; font-weight:bold; color:#1e293b;">
+        <option value="personel">Personel (İşlem Yapabilir)</option>
+        <option value="ortak">Ortak (Sadece Görüntüler)</option>
+    </select>
     <button class="btn btn-yesil" type="submit">KULLANICI EKLE</button>
 </form>
-<p style="font-size:12px; color:#64748b; margin-top:10px;">Eklediğiniz kullanıcılar sisteme tam yetkiyle (Patron olarak) giriş yapabilir.</p>
+<p style="font-size:12px; color:#64748b; margin-top:10px;">
+    <b>Personel:</b> Kasa, gider vb. işlemleri yapabilir.<br>
+    <b>Ortak:</b> Sadece sisteme girip raporları görebilir, hiçbir şeyi silemez veya düzenleyemez.
+</p>
 </div>
 
 <div class="kart">
 <h3>📋 Kayıtlı Kullanıcılar</h3>
 <div style="overflow-x:auto">
 <table>
-<tr><th>Ad Soyad</th><th>Kullanıcı Adı</th><th>İşlem</th></tr>
+<tr><th>Ad Soyad</th><th>Kullanıcı Adı</th><th>Yetki / Rol</th><th>İşlem</th></tr>
 {% for u in kullanicilar %}
 <tr>
     <td><b>{{ u.full_name }}</b></td>
     <td>{{ u.username }}</td>
+    <td>
+        {% if u.role == 'admin' %}<span style="color:#dc2626; font-weight:bold;">👑 Patron</span>
+        {% elif u.role == 'ortak' %}<span style="color:#3b82f6; font-weight:bold;">👁️ Ortak (Sadece Görür)</span>
+        {% else %}<span style="color:#16a34a; font-weight:bold;">👤 Personel</span>{% endif %}
+    </td>
     <td>
         {% if u.id == current_user.id %}
             <span style="color:#16a34a; font-weight:bold;">(Siz)</span>
