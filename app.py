@@ -19,6 +19,7 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     full_name = db.Column(db.String(120), default="")
+    role = db.Column(db.String(20), default="personel") # admin veya personel
 
 class Kasa(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -84,6 +85,7 @@ class Log(db.Model):
 
 # ============ YARDIMCILAR ============
 def giris_yapmis(): return "user_id" in session
+def admin_mi(): return session.get("role") == "admin"
 def giris_gerek(f):
     from functools import wraps
     @wraps(f)
@@ -97,7 +99,7 @@ def log_yaz(islem, detay=""):
 
 @app.context_processor
 def inject_user():
-    return dict(current_user=User.query.get(session.get("user_id")) if giris_yapmis() else None)
+    return dict(current_user=User.query.get(session.get("user_id")) if giris_yapmis() else None, admin_mi=admin_mi())
 
 # ============ ROTALAR ============
 @app.route("/login", methods=["GET","POST"])
@@ -106,6 +108,7 @@ def login():
         u = User.query.filter_by(username=request.form["username"]).first()
         if u and check_password_hash(u.password_hash, request.form["password"]):
             session["user_id"] = u.id
+            session["role"] = u.role
             log_yaz("GİRİŞ", u.username)
             return redirect(url_for("kasa"))
         flash("Kullanıcı adı veya şifre yanlış!", "danger")
@@ -287,7 +290,12 @@ def borc_sil(id):
 @app.route("/personel", methods=["GET", "POST"])
 @giris_gerek
 def personel():
+    # Personel ekleme yetkisi sadece Patron'dadır
     if request.method == "POST":
+        if not admin_mi():
+            flash("Personel ekleme yetkiniz yok!", "danger")
+            return redirect(url_for("personel"))
+            
         try: maas = float(request.form["maas"].replace(",", "."))
         except: maas = 0
         try: ise_giris = datetime.strptime(request.form["ise_giris"], "%Y-%m-%d")
@@ -304,6 +312,7 @@ def personel():
 @app.route("/personel_duzenle/<int:pid>", methods=["POST"])
 @giris_gerek
 def personel_duzenle(pid):
+    if not admin_mi(): return redirect(url_for("personel"))
     p = Personel.query.get_or_404(pid)
     try: p.maas = float(request.form["maas"].replace(",", "."))
     except: pass
@@ -329,7 +338,6 @@ def avans_ver(pid):
     flash("Avans verildi.", "success")
     return redirect(url_for("personel"))
 
-# YENİ: Tarihli İzin Ekleme
 @app.route("/izin_ekle/<int:pid>", methods=["POST"])
 @giris_gerek
 def izin_ekle(pid):
@@ -346,7 +354,6 @@ def izin_ekle(pid):
     flash(f"{gun} gün izin eklendi.", "success")
     return redirect(url_for("personel"))
 
-# YENİ: İzin Silme
 @app.route("/izin_sil/<int:id>")
 @giris_gerek
 def izin_sil(id):
@@ -355,7 +362,6 @@ def izin_sil(id):
     flash("İzin kaydı silindi.", "success")
     return redirect(url_for("personel"))
 
-# YENİ: İzin Düzenleme
 @app.route("/izin_duzenle/<int:id>", methods=["POST"])
 @giris_gerek
 def izin_duzenle(id):
@@ -385,15 +391,20 @@ def maas_ode(pid):
 @app.route("/personel_sil/<int:pid>")
 @giris_gerek
 def personel_sil(pid):
+    if not admin_mi(): return redirect(url_for("personel"))
     p = Personel.query.get_or_404(pid)
     db.session.delete(p); db.session.commit()
     flash("Personel ve tüm geçmişi silindi.", "success")
     return redirect(url_for("personel"))
 
-# ============ KULLANICI YÖNETİMİ VE ŞİFRE ============
+# ============ KULLANICI (PERSONEL) EKLEME VE ŞİFRE ============
 @app.route("/kullanicilar", methods=["GET", "POST"])
 @giris_gerek
 def kullanicilar():
+    if not admin_mi():
+        flash("Bu sayfaya sadece Patron erişebilir!", "danger")
+        return redirect(url_for("kasa"))
+
     if request.method == "POST":
         kullanici_adi = request.form["username"]
         sifre = request.form["password"]
@@ -402,11 +413,12 @@ def kullanicilar():
         if User.query.filter_by(username=kullanici_adi).first():
             flash("Bu kullanıcı adı zaten alınmış!", "danger")
         else:
-            yeni_user = User(username=kullanici_adi, password_hash=generate_password_hash(sifre), full_name=ad_soyad)
+            # Yeni eklenen herkes PERSONEL rolündedir
+            yeni_user = User(username=kullanici_adi, password_hash=generate_password_hash(sifre), full_name=ad_soyad, role="personel")
             db.session.add(yeni_user)
             db.session.commit()
-            log_yaz("KULLANICI EKLE", kullanici_adi)
-            flash(f"✅ {ad_soyad} adlı yeni ana kullanıcı eklendi.", "success")
+            log_yaz("PERSONEL EKLE", kullanici_adi)
+            flash(f"✅ {ad_soyad} adlı personel sisteme eklendi.", "success")
         return redirect(url_for("kullanicilar"))
         
     return render_template("kullanicilar.html", kullanicilar=User.query.all())
@@ -414,6 +426,7 @@ def kullanicilar():
 @app.route("/kullanici_sil/<int:id>")
 @giris_gerek
 def kullanici_sil(id):
+    if not admin_mi(): return redirect(url_for("kasa"))
     if id == session.get("user_id"):
         flash("Kendi hesabınızı silemezsiniz!", "danger")
         return redirect(url_for("kullanicilar"))
@@ -455,8 +468,13 @@ def init_db():
             db.session.commit()
         except: db.session.rollback()
 
+        try:
+            db.session.execute(text("ALTER TABLE user ADD COLUMN role VARCHAR(20) DEFAULT 'admin'"))
+            db.session.commit()
+        except: db.session.rollback()
+
         if not User.query.filter_by(username="admin").first():
-            db.session.add(User(username="admin", password_hash=generate_password_hash("1234"), full_name="Baş Patron"))
+            db.session.add(User(username="admin", password_hash=generate_password_hash("1234"), full_name="Baş Patron", role="admin"))
             db.session.commit(); print("✅ Patron sistemi kuruldu.")
 
 init_db()
