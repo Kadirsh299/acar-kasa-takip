@@ -301,7 +301,6 @@ def personel():
         return redirect(url_for("personel"))
     return render_template("personel.html", personeller=Personel.query.all())
 
-# YENİ: PERSONEL DÜZENLEME
 @app.route("/personel_duzenle/<int:pid>", methods=["POST"])
 @giris_gerek
 def personel_duzenle(pid):
@@ -330,14 +329,45 @@ def avans_ver(pid):
     flash("Avans verildi.", "success")
     return redirect(url_for("personel"))
 
+# YENİ: Tarihli İzin Ekleme
 @app.route("/izin_ekle/<int:pid>", methods=["POST"])
 @giris_gerek
 def izin_ekle(pid):
     p = Personel.query.get_or_404(pid)
     try: gun = float(request.form["gun_sayisi"].replace(",", "."))
     except: flash("Geçerli gün sayısı girin!", "danger"); return redirect(url_for("personel"))
-    db.session.add(Izin(personel_id=p.id, gun_sayisi=gun, aciklama=request.form.get("aciklama", ""))); db.session.commit()
+        
+    izin_tarihi = datetime.now()
+    if request.form.get("tarih"):
+        try: izin_tarihi = datetime.strptime(request.form["tarih"], "%Y-%m-%d")
+        except: pass
+        
+    db.session.add(Izin(personel_id=p.id, gun_sayisi=gun, tarih=izin_tarihi, aciklama=request.form.get("aciklama", ""))); db.session.commit()
     flash(f"{gun} gün izin eklendi.", "success")
+    return redirect(url_for("personel"))
+
+# YENİ: İzin Silme
+@app.route("/izin_sil/<int:id>")
+@giris_gerek
+def izin_sil(id):
+    i = Izin.query.get_or_404(id)
+    db.session.delete(i); db.session.commit()
+    flash("İzin kaydı silindi.", "success")
+    return redirect(url_for("personel"))
+
+# YENİ: İzin Düzenleme
+@app.route("/izin_duzenle/<int:id>", methods=["POST"])
+@giris_gerek
+def izin_duzenle(id):
+    i = Izin.query.get_or_404(id)
+    try: i.gun_sayisi = float(request.form["gun_sayisi"].replace(",", "."))
+    except: pass
+    i.aciklama = request.form.get("aciklama", "")
+    if request.form.get("tarih"):
+        try: i.tarih = datetime.strptime(request.form["tarih"], "%Y-%m-%d")
+        except: pass
+    db.session.commit()
+    flash("İzin kaydı güncellendi.", "success")
     return redirect(url_for("personel"))
 
 @app.route("/maas_ode/<int:pid>")
