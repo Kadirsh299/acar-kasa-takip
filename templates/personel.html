@@ -31,9 +31,7 @@
         <b style="color:#16a34a;">Kalan: {{ "%.2f"|format(kalan_maas) }} TL</b>
     </td>
     <td>
-        <!-- Geçmiş Butonu -->
         <button class="btn btn-mavi" style="padding:4px 8px;font-size:11px" onclick="gecmisAc('{{ p.id }}')">📜 Geçmiş</button>
-        <!-- Düzenle Butonu -->
         <button class="btn btn-turuncu" style="padding:4px 8px;font-size:11px" onclick="duzenleAc({{ p.id }}, '{{ p.ad_soyad }}', '{{ p.gorev }}', {{ p.maas }}, '{{ p.ise_giris.strftime('%Y-%m-%d') if p.ise_giris else '' }}', {{ p.maas_gunu }})">✏️ Düzenle</button>
         <br>
         <button class="btn btn-yesil" style="padding:4px 8px;font-size:11px; margin-top:3px;" onclick="avansAc({{ p.id }}, '{{ p.ad_soyad }}')">💸 Avans</button>
@@ -66,12 +64,16 @@
         <h4 style="margin-top:20px; color:#3b82f6;">Kullanılan İzinler</h4>
         {% if p.izinler %}
         <table style="font-size:13px;">
-            <tr><th>Tarih</th><th>Gün</th><th>Açıklama</th></tr>
+            <tr><th>Tarih</th><th>Gün</th><th>Açıklama</th><th>İşlem</th></tr>
             {% for i in p.izinler %}
             <tr>
-                <td>{{ i.tarih.strftime("%d.%m.%Y %H:%M") }}</td>
+                <td>{{ i.tarih.strftime("%d.%m.%Y") }}</td>
                 <td style="color:#3b82f6; font-weight:bold;">{{ i.gun_sayisi }} Gün</td>
                 <td>{{ i.aciklama or "-" }}</td>
+                <td>
+                    <button class="btn btn-turuncu" style="padding:2px 5px;font-size:10px" onclick="izinDuzenleAc({{ i.id }}, '{{ i.gun_sayisi }}', '{{ i.aciklama }}', '{{ i.tarih.strftime('%Y-%m-%d') }}')">Düzelt</button>
+                    <a href="{{ url_for('izin_sil', id=i.id) }}" class="btn btn-kirmizi" style="padding:2px 5px;font-size:10px" onclick="return confirm('Bu izin silinsin mi?')">Sil</a>
+                </td>
             </tr>
             {% endfor %}
         </table>
@@ -92,15 +94,9 @@
 <div class="kart" style="max-width:500px;width:100%;margin:0">
 <h3>✏️ Personel Bilgilerini Düzenle</h3>
 <form method="post" id="duzenleForm">
-    <div class="form-row" style="margin-bottom:10px;">
-        <input name="ad_soyad" id="d_ad" placeholder="Ad Soyad" required>
-    </div>
-    <div class="form-row" style="margin-bottom:10px;">
-        <input name="gorev" id="d_gorev" placeholder="Görevi" required>
-    </div>
-    <div class="form-row" style="margin-bottom:10px;">
-        <input name="maas" id="d_maas" placeholder="Maaş (TL)" type="number" step="0.01" required>
-    </div>
+    <div class="form-row" style="margin-bottom:10px;"><input name="ad_soyad" id="d_ad" placeholder="Ad Soyad" required></div>
+    <div class="form-row" style="margin-bottom:10px;"><input name="gorev" id="d_gorev" placeholder="Görevi" required></div>
+    <div class="form-row" style="margin-bottom:10px;"><input name="maas" id="d_maas" placeholder="Maaş (TL)" type="number" step="0.01" required></div>
     <div class="form-row" style="margin-bottom:10px;">
         <label style="font-size:12px; flex:1;">İşe Giriş:<br><input type="date" name="ise_giris" id="d_ise_giris" required style="width:100%;"></label>
         <label style="font-size:12px; flex:1;">Maaş Günü:<br><input type="number" name="maas_gunu" id="d_maas_gunu" min="1" max="31" required style="width:100%;"></label>
@@ -116,9 +112,25 @@
 <div id="avansModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999;align-items:center;justify-content:center;padding:20px">
 <div class="kart" style="max-width:400px;width:100%;margin:0"><h3>💸 Avans Ver</h3><p>Personel: <b id="avansAd"></b></p><form method="post" id="avansForm"><input name="tutar" placeholder="Avans Tutarı (TL)" required type="number" step="0.01" style="width:100%;margin:10px 0"><input name="aciklama" placeholder="Açıklama" style="width:100%;margin:5px 0"><div style="display:flex;gap:10px;margin-top:15px"><button type="submit" class="btn btn-yesil" style="flex:1">ONAYLA</button><button type="button" class="btn btn-gri" style="flex:1" onclick="document.getElementById('avansModal').style.display='none'">İPTAL</button></div></form></div></div>
 
-<!-- İzin Modal -->
+<!-- İzin Ekle Modal -->
 <div id="izinModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999;align-items:center;justify-content:center;padding:20px">
-<div class="kart" style="max-width:400px;width:100%;margin:0"><h3>🏖️ İzin Ekle</h3><p>Personel: <b id="izinAd"></b></p><form method="post" id="izinForm"><input name="gun_sayisi" placeholder="İzin Gün Sayısı (Örn: 1 veya 0.5)" required type="number" step="0.5" style="width:100%;margin:10px 0"><input name="aciklama" placeholder="Açıklama (İsteğe bağlı)" style="width:100%;margin:5px 0"><div style="display:flex;gap:10px;margin-top:15px"><button type="submit" class="btn btn-yesil" style="flex:1">ONAYLA</button><button type="button" class="btn btn-gri" style="flex:1" onclick="document.getElementById('izinModal').style.display='none'">İPTAL</button></div></form></div></div>
+<div class="kart" style="max-width:400px;width:100%;margin:0"><h3>🏖️ İzin Ekle</h3><p>Personel: <b id="izinAd"></b></p>
+<form method="post" id="izinForm">
+    <label style="font-size:12px;">İzin Tarihi:<br><input type="date" name="tarih" id="izin_tarih" required style="width:100%; margin-bottom:10px;"></label>
+    <input name="gun_sayisi" placeholder="İzin Gün Sayısı (Örn: 1 veya 0.5)" required type="number" step="0.5" style="width:100%;margin-bottom:10px">
+    <input name="aciklama" placeholder="Açıklama (İsteğe bağlı)" style="width:100%;margin-bottom:10px">
+    <div style="display:flex;gap:10px;margin-top:15px"><button type="submit" class="btn btn-yesil" style="flex:1">ONAYLA</button><button type="button" class="btn btn-gri" style="flex:1" onclick="document.getElementById('izinModal').style.display='none'">İPTAL</button></div>
+</form></div></div>
+
+<!-- İzin Düzenle Modal -->
+<div id="izinDuzenleModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999;align-items:center;justify-content:center;padding:20px">
+<div class="kart" style="max-width:400px;width:100%;margin:0"><h3>✏️ İzni Düzenle</h3>
+<form method="post" id="izinDuzenleForm">
+    <label style="font-size:12px;">İzin Tarihi:<br><input type="date" name="tarih" id="id_tarih" required style="width:100%; margin-bottom:10px;"></label>
+    <input name="gun_sayisi" id="id_gun" placeholder="İzin Gün Sayısı" required type="number" step="0.5" style="width:100%;margin-bottom:10px">
+    <input name="aciklama" id="id_aciklama" placeholder="Açıklama" style="width:100%;margin-bottom:10px">
+    <div style="display:flex;gap:10px;margin-top:15px"><button type="submit" class="btn btn-yesil" style="flex:1">GÜNCELLE</button><button type="button" class="btn btn-gri" style="flex:1" onclick="document.getElementById('izinDuzenleModal').style.display='none'">İPTAL</button></div>
+</form></div></div>
 
 <script>
 function avansAc(id, ad){
@@ -129,6 +141,8 @@ function avansAc(id, ad){
 function izinAc(id, ad){
     document.getElementById('izinAd').textContent = ad;
     document.getElementById('izinForm').action = "/izin_ekle/" + id;
+    // Varsayılan tarih bugün olsun
+    document.getElementById('izin_tarih').value = new Date().toISOString().split('T')[0];
     document.getElementById('izinModal').style.display = 'flex';
 }
 function gecmisAc(id){
@@ -142,6 +156,13 @@ function duzenleAc(id, ad, gorev, maas, ise_giris, maas_gunu){
     document.getElementById('d_maas_gunu').value = maas_gunu;
     document.getElementById('duzenleForm').action = "/personel_duzenle/" + id;
     document.getElementById('duzenleModal').style.display = 'flex';
+}
+function izinDuzenleAc(id, gun, aciklama, tarih){
+    document.getElementById('id_gun').value = gun;
+    document.getElementById('id_aciklama').value = aciklama;
+    document.getElementById('id_tarih').value = tarih;
+    document.getElementById('izinDuzenleForm').action = "/izin_duzenle/" + id;
+    document.getElementById('izinDuzenleModal').style.display = 'flex';
 }
 </script>
 {% endblock %}
