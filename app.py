@@ -19,7 +19,7 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     full_name = db.Column(db.String(120), default="")
-    role = db.Column(db.String(20), default="personel") # admin, personel, ortak
+    role = db.Column(db.String(20), default="personel") 
 
 class Kasa(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -94,7 +94,6 @@ def giris_gerek(f):
         return f(*a, **kw)
     return wrapper
 
-# YENİ: Yazma/İşlem yapma yetkisi kontrolü (Ortaklar giremez)
 def islem_yetkisi_gerek(f):
     from functools import wraps
     @wraps(f)
@@ -485,9 +484,16 @@ def init_db():
             db.session.commit()
         except: db.session.rollback()
 
-        if not User.query.filter_by(username="admin").first():
+        # ADMİN ROLÜNÜ ZORLA GÜNCELLE
+        admin_user = User.query.filter_by(username="admin").first()
+        if admin_user:
+            admin_user.role = "admin"
+            db.session.commit()
+        else:
             db.session.add(User(username="admin", password_hash=generate_password_hash("1234"), full_name="Baş Patron", role="admin"))
-            db.session.commit(); print("✅ Patron sistemi kuruldu.")
+            db.session.commit()
+            
+        print("✅ Patron sistemi kuruldu ve yetkiler doğrulandı.")
 
 init_db()
 if __name__ == "__main__": app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
