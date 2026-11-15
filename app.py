@@ -52,8 +52,8 @@ class Personel(db.Model):
     maas = db.Column(db.Float, default=0)
     ise_giris = db.Column(db.DateTime)
     maas_gunu = db.Column(db.Integer, default=1)
-    avanslar = db.relationship('Avans', backref='personel', lazy=True)
-    izinler = db.relationship('Izin', backref='personel', lazy=True)
+    avanslar = db.relationship('Avans', backref='personel', lazy=True, cascade="all, delete-orphan")
+    izinler = db.relationship('Izin', backref='personel', lazy=True, cascade="all, delete-orphan")
 
 class Avans(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -147,7 +147,6 @@ def kasa():
     for k in kayitlar:
         if k.tip in toplamlar: toplamlar[k.tip] += k.tutar
 
-    # YENİ: Günlük Giderleri Çek ve Kalanı Hesapla
     giderler = Gider.query.filter(Gider.tarih.like(f"{secili_tarih}%")).all()
     toplam_gider = sum(g.tutar for g in giderler)
     toplam_gelir = sum(k.tutar for k in kayitlar)
@@ -302,6 +301,25 @@ def personel():
         return redirect(url_for("personel"))
     return render_template("personel.html", personeller=Personel.query.all())
 
+# YENİ: PERSONEL DÜZENLEME
+@app.route("/personel_duzenle/<int:pid>", methods=["POST"])
+@giris_gerek
+def personel_duzenle(pid):
+    p = Personel.query.get_or_404(pid)
+    try: p.maas = float(request.form["maas"].replace(",", "."))
+    except: pass
+    p.ad_soyad = request.form["ad_soyad"]
+    p.gorev = request.form["gorev"]
+    try: p.maas_gunu = int(request.form["maas_gunu"])
+    except: pass
+    try: p.ise_giris = datetime.strptime(request.form["ise_giris"], "%Y-%m-%d")
+    except: pass
+    
+    db.session.commit()
+    log_yaz("PERSONEL DÜZENLE", p.ad_soyad)
+    flash("Personel bilgileri başarıyla güncellendi.", "success")
+    return redirect(url_for("personel"))
+
 @app.route("/avans_ver/<int:pid>", methods=["POST"])
 @giris_gerek
 def avans_ver(pid):
@@ -337,7 +355,10 @@ def maas_ode(pid):
 @app.route("/personel_sil/<int:pid>")
 @giris_gerek
 def personel_sil(pid):
-    p = Personel.query.get_or_404(pid); Avans.query.filter_by(personel_id=p.id).delete(); Izin.query.filter_by(personel_id=p.id).delete(); db.session.delete(p); db.session.commit(); return redirect(url_for("personel"))
+    p = Personel.query.get_or_404(pid)
+    db.session.delete(p); db.session.commit()
+    flash("Personel ve tüm geçmişi silindi.", "success")
+    return redirect(url_for("personel"))
 
 # ============ KULLANICI YÖNETİMİ VE ŞİFRE ============
 @app.route("/kullanicilar", methods=["GET", "POST"])
