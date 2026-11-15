@@ -136,7 +136,7 @@ def logout():
 @giris_gerek
 def index(): return redirect(url_for("kasa"))
 
-# ============ GÜNLÜK KASA ============
+# ============ GÜNLÜK KASA (GELİR VE GİDER BİR ARADA) ============
 @app.route("/kasa", methods=["GET", "POST"])
 @giris_gerek
 def kasa():
@@ -144,32 +144,47 @@ def kasa():
     
     if request.method == "POST":
         if session.get("role") == "ortak": return redirect(url_for("kasa"))
-        try: tutar = float(request.form["tutar"].replace(",", "."))
-        except: flash("Geçerli tutar girin!", "danger"); return redirect(url_for("kasa"))
-            
+        
+        form_tipi = request.form.get("form_tipi")
         islem_tarihi = datetime.now()
         if request.form.get("tarih"):
             try: islem_tarihi = datetime.strptime(request.form["tarih"], "%Y-%m-%d")
             except: pass
             
-        db.session.add(Kasa(tarih=islem_tarihi, tip=request.form["tip"], tutar=tutar, aciklama=request.form.get("aciklama", "")))
-        db.session.commit()
-        log_yaz("KASA EKLE", f"{tutar} TL - {request.form['tip']}")
-        flash("Kasa kaydı başarıyla eklendi.", "success")
+        # GELİR EKLEME
+        if form_tipi == "gelir":
+            try: tutar = float(request.form["tutar"].replace(",", "."))
+            except: flash("Geçerli tutar girin!", "danger"); return redirect(url_for("kasa"))
+            db.session.add(Kasa(tarih=islem_tarihi, tip=request.form["tip"], tutar=tutar, aciklama=request.form.get("aciklama", "")))
+            db.session.commit()
+            log_yaz("KASA EKLE", f"{tutar} TL - {request.form['tip']}")
+            flash("Gelir kaydı başarıyla eklendi.", "success")
+            
+        # GİDER EKLEME
+        elif form_tipi == "gider":
+            try: tutar = float(request.form["tutar"].replace(",", "."))
+            except: flash("Geçerli tutar girin!", "danger"); return redirect(url_for("kasa"))
+            db.session.add(Gider(tarih=islem_tarihi, aciklama=request.form["aciklama"], tutar=tutar))
+            db.session.commit()
+            log_yaz("GİDER EKLE", f"{request.form['aciklama']} - {tutar} TL")
+            flash("Gider kaydı başarıyla eklendi.", "success")
+            
         return redirect(url_for("kasa", tarih=secili_tarih))
 
+    # VERİLERİ ÇEK
     kayitlar = Kasa.query.filter(Kasa.tarih.like(f"{secili_tarih}%")).order_by(Kasa.tarih.desc()).all()
+    giderler = Gider.query.filter(Gider.tarih.like(f"{secili_tarih}%")).order_by(Gider.tarih.desc()).all()
     
     toplamlar = {"Nakit":0, "Kredi Kartı":0, "Havale":0, "Euro":0, "Dolar":0, "Pound":0, "ETS":0, "Tatilbudur":0, "OtelFiyat":0, "Jolly Tur":0}
     for k in kayitlar:
         if k.tip in toplamlar: toplamlar[k.tip] += k.tutar
 
-    giderler = Gider.query.filter(Gider.tarih.like(f"{secili_tarih}%")).all()
     toplam_gider = sum(g.tutar for g in giderler)
     toplam_gelir = sum(k.tutar for k in kayitlar)
     kalan = toplam_gelir - toplam_gider
 
-    return render_template("kasa.html", kayitlar=kayitlar, secili_tarih=secili_tarih, toplamlar=toplamlar, toplam_gelir=toplam_gelir, toplam_gider=toplam_gider, kalan=kalan)
+    return render_template("kasa.html", kayitlar=kayitlar, giderler=giderler, secili_tarih=secili_tarih, 
+                           toplamlar=toplamlar, toplam_gelir=toplam_gelir, toplam_gider=toplam_gider, kalan=kalan)
 
 @app.route("/kasa_sil/<int:id>")
 @islem_yetkisi_gerek
@@ -178,6 +193,15 @@ def kasa_sil(id):
     db.session.delete(k); db.session.commit()
     log_yaz("KASA SİL", f"{k.tutar} TL silindi.")
     flash("Kasa kaydı silindi.", "success")
+    return redirect(url_for("kasa", tarih=tarih))
+
+@app.route("/gider_sil/<int:id>")
+@islem_yetkisi_gerek
+def gider_sil(id):
+    g = Gider.query.get_or_404(id); tarih = g.tarih.strftime("%Y-%m-%d")
+    db.session.delete(g); db.session.commit()
+    log_yaz("GİDER SİL", f"ID {id} silindi.")
+    flash("Gider silindi.", "success")
     return redirect(url_for("kasa", tarih=tarih))
 
 # ============ AYLIK KASA ============
@@ -227,41 +251,6 @@ def aylik_kasa():
     return render_template("aylik_kasa.html", secili_ay=secili_ay, toplamlar=toplamlar, 
                            toplam_gider=toplam_gider, usd_kur=usd_kur, eur_kur=eur_kur, gbp_kur=gbp_kur,
                            dolar_tl=dolar_tl, euro_tl=euro_tl, pound_tl=pound_tl, toplam_gelir_tl=toplam_gelir_tl, kalan=kalan)
-
-# ============ GİDERLER ============
-@app.route("/giderler", methods=["GET", "POST"])
-@giris_gerek
-def giderler():
-    secili_tarih = request.args.get("tarih", datetime.now().strftime("%Y-%m-%d"))
-    
-    if request.method == "POST":
-        if session.get("role") == "ortak": return redirect(url_for("giderler"))
-        try: tutar = float(request.form["tutar"].replace(",", "."))
-        except: flash("Geçerli tutar girin!", "danger"); return redirect(url_for("giderler"))
-            
-        islem_tarihi = datetime.now()
-        if request.form.get("tarih"):
-            try: islem_tarihi = datetime.strptime(request.form["tarih"], "%Y-%m-%d")
-            except: pass
-            
-        db.session.add(Gider(tarih=islem_tarihi, aciklama=request.form["aciklama"], tutar=tutar))
-        db.session.commit()
-        log_yaz("GİDER EKLE", f"{request.form['aciklama']} - {tutar} TL")
-        flash("Gider başarıyla eklendi.", "success")
-        return redirect(url_for("giderler", tarih=secili_tarih))
-
-    gider_list = Gider.query.filter(Gider.tarih.like(f"{secili_tarih}%")).order_by(Gider.tarih.desc()).all()
-    toplam_gider = sum(g.tutar for g in gider_list)
-    return render_template("giderler.html", giderler=gider_list, secili_tarih=secili_tarih, toplam_gider=toplam_gider)
-
-@app.route("/gider_sil/<int:id>")
-@islem_yetkisi_gerek
-def gider_sil(id):
-    g = Gider.query.get_or_404(id); tarih = g.tarih.strftime("%Y-%m-%d")
-    db.session.delete(g); db.session.commit()
-    log_yaz("GİDER SİL", f"ID {id} silindi.")
-    flash("Gider silindi.", "success")
-    return redirect(url_for("giderler", tarih=tarih))
 
 # ============ BORÇLULAR ============
 @app.route("/borclular", methods=["GET", "POST"])
@@ -484,7 +473,6 @@ def init_db():
             db.session.commit()
         except: db.session.rollback()
 
-        # ADMİN ROLÜNÜ ZORLA GÜNCELLE
         admin_user = User.query.filter_by(username="admin").first()
         if admin_user:
             admin_user.role = "admin"
