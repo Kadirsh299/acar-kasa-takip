@@ -136,11 +136,12 @@ def logout():
 @giris_gerek
 def index(): return redirect(url_for("kasa"))
 
-# ============ GÜNLÜK KASA (GELİR VE GİDER BİR ARADA) ============
+# ============ GÜNLÜK KASA ============
 @app.route("/kasa", methods=["GET", "POST"])
 @giris_gerek
 def kasa():
     secili_tarih = request.args.get("tarih", datetime.now().strftime("%Y-%m-%d"))
+    secili_ay = secili_tarih[:7] # Seçili tarihin ait olduğu ay (Örn: 2026-11)
     
     if request.method == "POST":
         if session.get("role") == "ortak": return redirect(url_for("kasa"))
@@ -151,16 +152,14 @@ def kasa():
             try: islem_tarihi = datetime.strptime(request.form["tarih"], "%Y-%m-%d")
             except: pass
             
-        # GELİR EKLEME
         if form_tipi == "gelir":
             try: tutar = float(request.form["tutar"].replace(",", "."))
             except: flash("Geçerli tutar girin!", "danger"); return redirect(url_for("kasa"))
             db.session.add(Kasa(tarih=islem_tarihi, tip=request.form["tip"], tutar=tutar, aciklama=request.form.get("aciklama", "")))
             db.session.commit()
-            log_yaz("KASA EKLE", f"{tutar} TL - {request.form['tip']}")
+            log_yaz("KASA EKLE", f"{tutar} {request.form['tip']}")
             flash("Gelir kaydı başarıyla eklendi.", "success")
             
-        # GİDER EKLEME
         elif form_tipi == "gider":
             try: tutar = float(request.form["tutar"].replace(",", "."))
             except: flash("Geçerli tutar girin!", "danger"); return redirect(url_for("kasa"))
@@ -171,7 +170,6 @@ def kasa():
             
         return redirect(url_for("kasa", tarih=secili_tarih))
 
-    # VERİLERİ ÇEK
     kayitlar = Kasa.query.filter(Kasa.tarih.like(f"{secili_tarih}%")).order_by(Kasa.tarih.desc()).all()
     giderler = Gider.query.filter(Gider.tarih.like(f"{secili_tarih}%")).order_by(Gider.tarih.desc()).all()
     
@@ -179,19 +177,33 @@ def kasa():
     for k in kayitlar:
         if k.tip in toplamlar: toplamlar[k.tip] += k.tutar
 
+    # DÖVİZ KURLARINI ÇEK (Seçili ayın kurları)
+    kur = AylikKur.query.filter_by(ay=secili_ay).first()
+    usd_kur = kur.usd if kur else 34.0
+    eur_kur = kur.eur if kur else 37.0
+    gbp_kur = kur.gbp if kur else 43.0
+
+    # TOPLAM GELİR HESAPLAMA (TL + Döviz Karşılıkları)
+    tl_gelir = sum(v for k, v in toplamlar.items() if k not in ["Euro", "Dolar", "Pound"])
+    dolar_tl = toplamlar["Dolar"] * usd_kur
+    euro_tl = toplamlar["Euro"] * eur_kur
+    pound_tl = toplamlar["Pound"] * gbp_kur
+
+    toplam_gelir = tl_gelir + dolar_tl + euro_tl + pound_tl
     toplam_gider = sum(g.tutar for g in giderler)
-    toplam_gelir = sum(k.tutar for k in kayitlar)
     kalan = toplam_gelir - toplam_gider
 
     return render_template("kasa.html", kayitlar=kayitlar, giderler=giderler, secili_tarih=secili_tarih, 
-                           toplamlar=toplamlar, toplam_gelir=toplam_gelir, toplam_gider=toplam_gider, kalan=kalan)
+                           toplamlar=toplamlar, toplam_gelir=toplam_gelir, toplam_gider=toplam_gider, kalan=kalan,
+                           usd_kur=usd_kur, eur_kur=eur_kur, gbp_kur=gbp_kur, 
+                           dolar_tl=dolar_tl, euro_tl=euro_tl, pound_tl=pound_tl)
 
 @app.route("/kasa_sil/<int:id>")
 @islem_yetkisi_gerek
 def kasa_sil(id):
     k = Kasa.query.get_or_404(id); tarih = k.tarih.strftime("%Y-%m-%d")
     db.session.delete(k); db.session.commit()
-    log_yaz("KASA SİL", f"{k.tutar} TL silindi.")
+    log_yaz("KASA SİL", f"{k.tutar} silindi.")
     flash("Kasa kaydı silindi.", "success")
     return redirect(url_for("kasa", tarih=tarih))
 
