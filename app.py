@@ -19,7 +19,7 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     full_name = db.Column(db.String(120), default="")
-    role = db.Column(db.String(20), default="personel") # admin veya personel
+    role = db.Column(db.String(20), default="personel") # admin, personel, ortak
 
 class Kasa(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -93,13 +93,27 @@ def giris_gerek(f):
         if not giris_yapmis(): return redirect(url_for("login"))
         return f(*a, **kw)
     return wrapper
+
+# YENİ: Yazma/İşlem yapma yetkisi kontrolü (Ortaklar giremez)
+def islem_yetkisi_gerek(f):
+    from functools import wraps
+    @wraps(f)
+    def wrapper(*a, **kw):
+        if not giris_yapmis(): return redirect(url_for("login"))
+        if session.get("role") == "ortak":
+            flash("Ortak hesapları sadece görüntüleme yapabilir, işlem yapamaz!", "danger")
+            return redirect(url_for("kasa"))
+        return f(*a, **kw)
+    return wrapper
+
 def log_yaz(islem, detay=""):
     db.session.add(Log(islem=islem, detay=detay))
     db.session.commit()
 
 @app.context_processor
 def inject_user():
-    return dict(current_user=User.query.get(session.get("user_id")) if giris_yapmis() else None, admin_mi=admin_mi())
+    return dict(current_user=User.query.get(session.get("user_id")) if giris_yapmis() else None, 
+                admin_mi=admin_mi(), ortak_mi=(session.get("role") == "ortak"))
 
 # ============ ROTALAR ============
 @app.route("/login", methods=["GET","POST"])
@@ -130,6 +144,7 @@ def kasa():
     secili_tarih = request.args.get("tarih", datetime.now().strftime("%Y-%m-%d"))
     
     if request.method == "POST":
+        if session.get("role") == "ortak": return redirect(url_for("kasa"))
         try: tutar = float(request.form["tutar"].replace(",", "."))
         except: flash("Geçerli tutar girin!", "danger"); return redirect(url_for("kasa"))
             
@@ -158,7 +173,7 @@ def kasa():
     return render_template("kasa.html", kayitlar=kayitlar, secili_tarih=secili_tarih, toplamlar=toplamlar, toplam_gelir=toplam_gelir, toplam_gider=toplam_gider, kalan=kalan)
 
 @app.route("/kasa_sil/<int:id>")
-@giris_gerek
+@islem_yetkisi_gerek
 def kasa_sil(id):
     k = Kasa.query.get_or_404(id); tarih = k.tarih.strftime("%Y-%m-%d")
     db.session.delete(k); db.session.commit()
@@ -173,6 +188,7 @@ def aylik_kasa():
     secili_ay = request.values.get("ay", datetime.now().strftime("%Y-%m"))
     
     if request.method == "POST":
+        if session.get("role") == "ortak": return redirect(url_for("aylik_kasa"))
         try:
             usd = float(request.form["usd"].replace(",", "."))
             eur = float(request.form["eur"].replace(",", "."))
@@ -220,6 +236,7 @@ def giderler():
     secili_tarih = request.args.get("tarih", datetime.now().strftime("%Y-%m-%d"))
     
     if request.method == "POST":
+        if session.get("role") == "ortak": return redirect(url_for("giderler"))
         try: tutar = float(request.form["tutar"].replace(",", "."))
         except: flash("Geçerli tutar girin!", "danger"); return redirect(url_for("giderler"))
             
@@ -239,7 +256,7 @@ def giderler():
     return render_template("giderler.html", giderler=gider_list, secili_tarih=secili_tarih, toplam_gider=toplam_gider)
 
 @app.route("/gider_sil/<int:id>")
-@giris_gerek
+@islem_yetkisi_gerek
 def gider_sil(id):
     g = Gider.query.get_or_404(id); tarih = g.tarih.strftime("%Y-%m-%d")
     db.session.delete(g); db.session.commit()
@@ -252,6 +269,7 @@ def gider_sil(id):
 @giris_gerek
 def borclular():
     if request.method == "POST":
+        if session.get("role") == "ortak": return redirect(url_for("borclular"))
         try: tutar = float(request.form["toplam_borc"].replace(",", "."))
         except: flash("Geçerli tutar girin!", "danger"); return redirect(url_for("borclular"))
             
@@ -265,7 +283,7 @@ def borclular():
     return render_template("borclular.html", borclular=borc_list)
 
 @app.route("/borc_ode/<int:id>", methods=["POST"])
-@giris_gerek
+@islem_yetkisi_gerek
 def borc_ode(id):
     b = Borc.query.get_or_404(id)
     try: tutar = float(request.form["tutar"].replace(",", "."))
@@ -279,7 +297,7 @@ def borc_ode(id):
     return redirect(url_for("borclular"))
 
 @app.route("/borc_sil/<int:id>")
-@giris_gerek
+@islem_yetkisi_gerek
 def borc_sil(id):
     b = Borc.query.get_or_404(id)
     db.session.delete(b); db.session.commit()
@@ -290,12 +308,8 @@ def borc_sil(id):
 @app.route("/personel", methods=["GET", "POST"])
 @giris_gerek
 def personel():
-    # Personel ekleme yetkisi sadece Patron'dadır
     if request.method == "POST":
-        if not admin_mi():
-            flash("Personel ekleme yetkiniz yok!", "danger")
-            return redirect(url_for("personel"))
-            
+        if not admin_mi(): return redirect(url_for("personel"))
         try: maas = float(request.form["maas"].replace(",", "."))
         except: maas = 0
         try: ise_giris = datetime.strptime(request.form["ise_giris"], "%Y-%m-%d")
@@ -310,9 +324,8 @@ def personel():
     return render_template("personel.html", personeller=Personel.query.all())
 
 @app.route("/personel_duzenle/<int:pid>", methods=["POST"])
-@giris_gerek
+@islem_yetkisi_gerek
 def personel_duzenle(pid):
-    if not admin_mi(): return redirect(url_for("personel"))
     p = Personel.query.get_or_404(pid)
     try: p.maas = float(request.form["maas"].replace(",", "."))
     except: pass
@@ -329,7 +342,7 @@ def personel_duzenle(pid):
     return redirect(url_for("personel"))
 
 @app.route("/avans_ver/<int:pid>", methods=["POST"])
-@giris_gerek
+@islem_yetkisi_gerek
 def avans_ver(pid):
     p = Personel.query.get_or_404(pid)
     try: tutar = float(request.form["tutar"].replace(",", "."))
@@ -339,7 +352,7 @@ def avans_ver(pid):
     return redirect(url_for("personel"))
 
 @app.route("/izin_ekle/<int:pid>", methods=["POST"])
-@giris_gerek
+@islem_yetkisi_gerek
 def izin_ekle(pid):
     p = Personel.query.get_or_404(pid)
     try: gun = float(request.form["gun_sayisi"].replace(",", "."))
@@ -355,7 +368,7 @@ def izin_ekle(pid):
     return redirect(url_for("personel"))
 
 @app.route("/izin_sil/<int:id>")
-@giris_gerek
+@islem_yetkisi_gerek
 def izin_sil(id):
     i = Izin.query.get_or_404(id)
     db.session.delete(i); db.session.commit()
@@ -363,7 +376,7 @@ def izin_sil(id):
     return redirect(url_for("personel"))
 
 @app.route("/izin_duzenle/<int:id>", methods=["POST"])
-@giris_gerek
+@islem_yetkisi_gerek
 def izin_duzenle(id):
     i = Izin.query.get_or_404(id)
     try: i.gun_sayisi = float(request.form["gun_sayisi"].replace(",", "."))
@@ -377,7 +390,7 @@ def izin_duzenle(id):
     return redirect(url_for("personel"))
 
 @app.route("/maas_ode/<int:pid>")
-@giris_gerek
+@islem_yetkisi_gerek
 def maas_ode(pid):
     p = Personel.query.get_or_404(pid)
     kalan = p.maas - sum(a.tutar for a in p.avanslar)
@@ -389,15 +402,14 @@ def maas_ode(pid):
     return redirect(url_for("personel"))
 
 @app.route("/personel_sil/<int:pid>")
-@giris_gerek
+@islem_yetkisi_gerek
 def personel_sil(pid):
-    if not admin_mi(): return redirect(url_for("personel"))
     p = Personel.query.get_or_404(pid)
     db.session.delete(p); db.session.commit()
     flash("Personel ve tüm geçmişi silindi.", "success")
     return redirect(url_for("personel"))
 
-# ============ KULLANICI (PERSONEL) EKLEME VE ŞİFRE ============
+# ============ KULLANICI (ORTAK VE PERSONEL) EKLEME ============
 @app.route("/kullanicilar", methods=["GET", "POST"])
 @giris_gerek
 def kullanicilar():
@@ -409,16 +421,16 @@ def kullanicilar():
         kullanici_adi = request.form["username"]
         sifre = request.form["password"]
         ad_soyad = request.form["full_name"]
+        rol = request.form.get("role", "personel")
         
         if User.query.filter_by(username=kullanici_adi).first():
             flash("Bu kullanıcı adı zaten alınmış!", "danger")
         else:
-            # Yeni eklenen herkes PERSONEL rolündedir
-            yeni_user = User(username=kullanici_adi, password_hash=generate_password_hash(sifre), full_name=ad_soyad, role="personel")
+            yeni_user = User(username=kullanici_adi, password_hash=generate_password_hash(sifre), full_name=ad_soyad, role=rol)
             db.session.add(yeni_user)
             db.session.commit()
-            log_yaz("PERSONEL EKLE", kullanici_adi)
-            flash(f"✅ {ad_soyad} adlı personel sisteme eklendi.", "success")
+            log_yaz("KULLANICI EKLE", f"{kullanici_adi} - Rol: {rol}")
+            flash(f"✅ {ad_soyad} adlı kullanıcı sisteme eklendi.", "success")
         return redirect(url_for("kullanicilar"))
         
     return render_template("kullanicilar.html", kullanicilar=User.query.all())
